@@ -1,8 +1,9 @@
 import { useAuth } from "@/contexts/AuthContext";
-import { students, grades, attendance, announcements, subjects, getGradeColor } from "@/data/schoolData";
+import { useStudents, useGrades, useAttendance, useAnnouncements, useSubjects, useMyStudent, getGradeColor } from "@/hooks/useSchoolData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Users, BookOpen, ClipboardCheck, TrendingUp, Bell, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 function StatCard({ title, value, icon: Icon, subtitle, color }: { title: string; value: string | number; icon: any; subtitle: string; color: string }) {
   return (
@@ -23,17 +24,35 @@ function StatCard({ title, value, icon: Icon, subtitle, color }: { title: string
   );
 }
 
+function LoadingSkeleton() {
+  return (
+    <div className="space-y-6">
+      <Skeleton className="h-8 w-64" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {[1,2,3,4].map(i => <Skeleton key={i} className="h-28" />)}
+      </div>
+    </div>
+  );
+}
+
 function TeacherDashboard() {
-  const todayAttendance = attendance.filter(a => a.date === "2026-04-10");
+  const { data: students = [] } = useStudents();
+  const { data: allGrades = [] } = useGrades();
+  const { data: allAttendance = [] } = useAttendance();
+  const { data: announcements = [] } = useAnnouncements();
+  const { data: subjects = [] } = useSubjects();
+
+  const today = new Date().toISOString().split("T")[0];
+  const todayAttendance = allAttendance.filter(a => a.date === today);
   const presentCount = todayAttendance.filter(a => a.status === "present").length;
   const absentCount = todayAttendance.filter(a => a.status === "absent").length;
-  const avgGrade = Math.round(grades.reduce((s, g) => s + g.value, 0) / grades.length);
+  const avgGrade = allGrades.length ? Math.round(allGrades.reduce((s, g) => s + g.value, 0) / allGrades.length) : 0;
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-heading font-bold">Panel del Profesor</h1>
-        <p className="text-muted-foreground">Resumen del día — 10 de abril, 2026</p>
+        <p className="text-muted-foreground">Resumen del día — {new Date().toLocaleDateString("es", { day: "numeric", month: "long", year: "numeric" })}</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -44,7 +63,6 @@ function TeacherDashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent grades */}
         <Card className="glass-card">
           <CardHeader className="pb-3">
             <CardTitle className="text-base font-heading flex items-center gap-2">
@@ -53,24 +71,24 @@ function TeacherDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {grades.slice(0, 5).map((g, i) => {
-                const student = students.find(s => s.id === g.studentId);
-                const subject = subjects.find(s => s.id === g.subjectId);
+              {allGrades.slice(0, 5).map((g) => {
+                const student = students.find(s => s.id === g.student_id);
+                const subject = subjects.find(s => s.id === g.subject_id);
                 return (
-                  <div key={i} className="flex items-center justify-between py-2 border-b last:border-0">
+                  <div key={g.id} className="flex items-center justify-between py-2 border-b last:border-0">
                     <div>
-                      <p className="text-sm font-medium">{student?.name}</p>
+                      <p className="text-sm font-medium">{student?.name || "—"}</p>
                       <p className="text-xs text-muted-foreground">{subject?.name} — {g.description}</p>
                     </div>
                     <span className={`text-lg font-heading font-bold ${getGradeColor(g.value)}`}>{g.value}</span>
                   </div>
                 );
               })}
+              {allGrades.length === 0 && <p className="text-sm text-muted-foreground">No hay calificaciones aún</p>}
             </div>
           </CardContent>
         </Card>
 
-        {/* Announcements */}
         <Card className="glass-card">
           <CardHeader className="pb-3">
             <CardTitle className="text-base font-heading flex items-center gap-2">
@@ -79,7 +97,7 @@ function TeacherDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {announcements.map((a) => (
+              {announcements.slice(0, 4).map((a) => (
                 <div key={a.id} className="py-2 border-b last:border-0">
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium">{a.title}</p>
@@ -90,43 +108,22 @@ function TeacherDashboard() {
                   <p className="text-xs text-muted-foreground mt-1">{a.content}</p>
                 </div>
               ))}
+              {announcements.length === 0 && <p className="text-sm text-muted-foreground">No hay anuncios</p>}
             </div>
           </CardContent>
         </Card>
       </div>
-
-      {/* Attendance today */}
-      <Card className="glass-card">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base font-heading flex items-center gap-2">
-            <ClipboardCheck className="w-4 h-4 text-accent" /> Asistencia de Hoy
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {students.map((student) => {
-              const record = todayAttendance.find(a => a.studentId === student.id);
-              const status = record?.status || "absent";
-              const icon = status === "present" ? CheckCircle2 : status === "absent" ? XCircle : Clock;
-              const color = status === "present" ? "text-success" : status === "absent" ? "text-destructive" : "text-warning";
-              const Icon = icon;
-              return (
-                <div key={student.id} className="flex items-center gap-2 p-2 rounded-lg bg-muted/50">
-                  <Icon className={`w-4 h-4 ${color} shrink-0`} />
-                  <span className="text-sm truncate">{student.name.split(" ")[0]}</span>
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
 
 function StudentDashboard() {
-  const myGrades = grades.filter(g => g.studentId === "s1");
-  const myAttendance = attendance.filter(a => a.studentId === "s1");
+  const { data: myStudent } = useMyStudent();
+  const { data: myGrades = [] } = useGrades(myStudent ? { studentId: myStudent.id } : undefined);
+  const { data: myAttendance = [] } = useAttendance(myStudent ? { studentId: myStudent.id } : undefined);
+  const { data: subjects = [] } = useSubjects();
+  const { data: announcements = [] } = useAnnouncements();
+
   const avg = myGrades.length ? Math.round(myGrades.reduce((s, g) => s + g.value, 0) / myGrades.length) : 0;
   const presentDays = myAttendance.filter(a => a.status === "present").length;
 
@@ -134,26 +131,24 @@ function StudentDashboard() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-heading font-bold">Mi Panel</h1>
-        <p className="text-muted-foreground">Resumen académico — Carlos Rodríguez</p>
+        <p className="text-muted-foreground">Resumen académico</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard title="Mi Promedio" value={avg} icon={TrendingUp} subtitle="General" color="bg-success/10 text-success" />
         <StatCard title="Asistencia" value={`${presentDays}/${myAttendance.length}`} icon={ClipboardCheck} subtitle="Días presente" color="bg-accent/10 text-accent" />
-        <StatCard title="Materias" value={new Set(myGrades.map(g => g.subjectId)).size} icon={BookOpen} subtitle="Con calificaciones" color="bg-warning/10 text-warning" />
+        <StatCard title="Materias" value={new Set(myGrades.map(g => g.subject_id)).size} icon={BookOpen} subtitle="Con calificaciones" color="bg-warning/10 text-warning" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="glass-card">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base font-heading">Mis Calificaciones</CardTitle>
-          </CardHeader>
+          <CardHeader className="pb-3"><CardTitle className="text-base font-heading">Mis Calificaciones</CardTitle></CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {myGrades.map((g, i) => {
-                const subject = subjects.find(s => s.id === g.subjectId);
+              {myGrades.map((g) => {
+                const subject = subjects.find(s => s.id === g.subject_id);
                 return (
-                  <div key={i} className="flex items-center justify-between py-2 border-b last:border-0">
+                  <div key={g.id} className="flex items-center justify-between py-2 border-b last:border-0">
                     <div>
                       <p className="text-sm font-medium">{subject?.name}</p>
                       <p className="text-xs text-muted-foreground">{g.description}</p>
@@ -162,14 +157,13 @@ function StudentDashboard() {
                   </div>
                 );
               })}
+              {myGrades.length === 0 && <p className="text-sm text-muted-foreground">No hay calificaciones aún</p>}
             </div>
           </CardContent>
         </Card>
 
         <Card className="glass-card">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base font-heading">Anuncios Recientes</CardTitle>
-          </CardHeader>
+          <CardHeader className="pb-3"><CardTitle className="text-base font-heading">Anuncios Recientes</CardTitle></CardHeader>
           <CardContent>
             <div className="space-y-3">
               {announcements.slice(0, 3).map(a => (
@@ -187,34 +181,36 @@ function StudentDashboard() {
 }
 
 function ParentDashboard() {
-  const childGrades = grades.filter(g => g.studentId === "s1");
-  const childAttendance = attendance.filter(a => a.studentId === "s1");
+  const { data: myStudent } = useMyStudent();
+  const { data: childGrades = [] } = useGrades(myStudent ? { studentId: myStudent.id } : undefined);
+  const { data: childAttendance = [] } = useAttendance(myStudent ? { studentId: myStudent.id } : undefined);
+  const { data: subjects = [] } = useSubjects();
+  const { data: announcements = [] } = useAnnouncements();
+
   const avg = childGrades.length ? Math.round(childGrades.reduce((s, g) => s + g.value, 0) / childGrades.length) : 0;
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-heading font-bold">Panel de Padre/Tutor</h1>
-        <p className="text-muted-foreground">Seguimiento de Carlos Rodríguez — 3° A</p>
+        <p className="text-muted-foreground">Seguimiento de {myStudent?.name || "tu hijo/a"} — {myStudent?.grade}</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard title="Promedio" value={avg} icon={TrendingUp} subtitle="De tu hijo/a" color="bg-success/10 text-success" />
         <StatCard title="Asistencia" value={`${childAttendance.filter(a => a.status === "present").length}/${childAttendance.length}`} icon={ClipboardCheck} subtitle="Días presente" color="bg-accent/10 text-accent" />
-        <StatCard title="Anuncios" value={announcements.length} icon={Bell} subtitle="Sin leer" color="bg-warning/10 text-warning" />
+        <StatCard title="Anuncios" value={announcements.length} icon={Bell} subtitle="Disponibles" color="bg-warning/10 text-warning" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="glass-card">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base font-heading">Calificaciones de Carlos</CardTitle>
-          </CardHeader>
+          <CardHeader className="pb-3"><CardTitle className="text-base font-heading">Calificaciones</CardTitle></CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {childGrades.map((g, i) => {
-                const subject = subjects.find(s => s.id === g.subjectId);
+              {childGrades.map((g) => {
+                const subject = subjects.find(s => s.id === g.subject_id);
                 return (
-                  <div key={i} className="flex items-center justify-between py-2 border-b last:border-0">
+                  <div key={g.id} className="flex items-center justify-between py-2 border-b last:border-0">
                     <div>
                       <p className="text-sm font-medium">{subject?.name}</p>
                       <p className="text-xs text-muted-foreground">{g.description}</p>
@@ -223,14 +219,13 @@ function ParentDashboard() {
                   </div>
                 );
               })}
+              {childGrades.length === 0 && <p className="text-sm text-muted-foreground">No hay calificaciones aún</p>}
             </div>
           </CardContent>
         </Card>
 
         <Card className="glass-card">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base font-heading">Anuncios</CardTitle>
-          </CardHeader>
+          <CardHeader className="pb-3"><CardTitle className="text-base font-heading">Anuncios</CardTitle></CardHeader>
           <CardContent>
             <div className="space-y-3">
               {announcements.map(a => (
@@ -251,8 +246,9 @@ function ParentDashboard() {
 }
 
 export default function Dashboard() {
-  const { user } = useAuth();
-  
+  const { user, loading } = useAuth();
+
+  if (loading) return <LoadingSkeleton />;
   if (user?.role === "student") return <StudentDashboard />;
   if (user?.role === "parent") return <ParentDashboard />;
   return <TeacherDashboard />;
