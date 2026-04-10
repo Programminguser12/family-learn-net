@@ -1,4 +1,4 @@
-import { subjects } from "@/data/schoolData";
+import { useSubjects } from "@/hooks/useSchoolData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calendar } from "lucide-react";
 
