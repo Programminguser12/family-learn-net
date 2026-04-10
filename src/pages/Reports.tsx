@@ -1,16 +1,20 @@
-import { students, grades, attendance, subjects, getGradeColor } from "@/data/schoolData";
+import { useStudents, useGrades, useSubjects, getGradeColor } from "@/hooks/useSchoolData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart3 } from "lucide-react";
 
 export default function Reports() {
+  const { data: students = [] } = useStudents();
+  const { data: allGrades = [] } = useGrades();
+  const { data: subjects = [] } = useSubjects();
+
   const subjectAverages = subjects.map(sub => {
-    const sg = grades.filter(g => g.subjectId === sub.id);
+    const sg = allGrades.filter(g => g.subject_id === sub.id);
     const avg = sg.length ? Math.round(sg.reduce((s, g) => s + g.value, 0) / sg.length) : 0;
     return { ...sub, avg, count: sg.length };
   });
 
   const topStudents = students.map(student => {
-    const sg = grades.filter(g => g.studentId === student.id);
+    const sg = allGrades.filter(g => g.student_id === student.id);
     const avg = sg.length ? Math.round(sg.reduce((s, g) => s + g.value, 0) / sg.length) : 0;
     return { ...student, avg };
   }).sort((a, b) => b.avg - a.avg);
@@ -38,13 +42,11 @@ export default function Reports() {
                     <span className={`text-sm font-bold ${getGradeColor(sub.avg)}`}>{sub.avg}</span>
                   </div>
                   <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full gradient-primary transition-all duration-500"
-                      style={{ width: `${sub.avg}%` }}
-                    />
+                    <div className="h-full rounded-full gradient-primary transition-all duration-500" style={{ width: `${sub.avg}%` }} />
                   </div>
                 </div>
               ))}
+              {subjectAverages.length === 0 && <p className="text-sm text-muted-foreground">No hay datos</p>}
             </div>
           </CardContent>
         </Card>
@@ -64,6 +66,7 @@ export default function Reports() {
                   <span className={`font-heading font-bold ${getGradeColor(student.avg)}`}>{student.avg}</span>
                 </div>
               ))}
+              {topStudents.length === 0 && <p className="text-sm text-muted-foreground">No hay datos</p>}
             </div>
           </CardContent>
         </Card>
