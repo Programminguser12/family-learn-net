@@ -25,20 +25,35 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 async function getUserRole(userId: string): Promise<UserRole> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("user_roles")
     .select("role")
     .eq("user_id", userId)
     .maybeSingle();
-  return (data?.role as UserRole) || "teacher";
+  
+  if (error) {
+    console.error("Error fetching user role:", error);
+  }
+  
+  if (data?.role) {
+    return data.role as UserRole;
+  }
+  
+  // No role found — default to teacher only as last resort
+  console.warn("No role found for user", userId, "— defaulting to teacher");
+  return "teacher";
 }
 
 async function getProfile(userId: string) {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("profiles")
     .select("full_name, avatar_url")
     .eq("user_id", userId)
     .maybeSingle();
+  
+  if (error) {
+    console.error("Error fetching profile:", error);
+  }
   return data;
 }
 
@@ -47,6 +62,9 @@ async function buildUser(supabaseUser: SupabaseUser): Promise<User> {
     getUserRole(supabaseUser.id),
     getProfile(supabaseUser.id),
   ]);
+  
+  console.log("Built user with role:", role, "for", supabaseUser.email);
+  
   return {
     id: supabaseUser.id,
     name: profile?.full_name || supabaseUser.email?.split("@")[0] || "",
@@ -62,23 +80,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        setSession(session);
-        if (session?.user) {
-          const appUser = await buildUser(session.user);
-          setUser(appUser);
+      async (_event, newSession) => {
+        setSession(newSession);
+        if (newSession?.user) {
+          // Use setTimeout to avoid potential deadlock with Supabase client
+          setTimeout(async () => {
+            const appUser = await buildUser(newSession.user);
+            setUser(appUser);
+            setLoading(false);
+          }, 0);
         } else {
           setUser(null);
+          setLoading(false);
         }
-        setLoading(false);
       }
     );
 
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session);
-      if (session?.user) {
-        const appUser = await buildUser(session.user);
+    // THEN check existing session
+    supabase.auth.getSession().then(async ({ data: { session: existingSession } }) => {
+      setSession(existingSession);
+      if (existingSession?.user) {
+        const appUser = await buildUser(existingSession.user);
         setUser(appUser);
       }
       setLoading(false);
@@ -102,7 +126,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Assign role
     if (data.user) {
-      await supabase.from("user_roles").insert({ user_id: data.user.id, role });
+      const { error: roleError } = await supabase.from("user_roles").insert({ user_id: data.user.id, role });
+      if (roleError) {
+        console.error("Error assigning role:", roleError);
+      }
     }
     return { error: null };
   };
